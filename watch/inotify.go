@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/ActiveState/tail/util"
-	"gopkg.in/fsnotify.v0"
+	"gopkg.in/fsnotify.v1"
 	"gopkg.in/tomb.v1"
 )
 
@@ -28,11 +28,11 @@ func (fw *InotifyFileWatcher) BlockUntilExists(t *tomb.Tomb) error {
 	dirname := filepath.Dir(fw.Filename)
 
 	// Watch for new files to be created in the parent directory.
-	err := fw.w.WatchFlags(dirname, fsnotify.FSN_CREATE)
-	if err != nil {
-		return err
-	}
-	defer fw.w.RemoveWatch(dirname)
+    err := fw.w.Add(dirname)
+    if err != nil {
+        return nil
+    }
+    defer fw.w.Remove(dirname)
 
 	// Do a real check now as the file might have been created before
 	// calling `WatchFlags` above.
@@ -43,12 +43,14 @@ func (fw *InotifyFileWatcher) BlockUntilExists(t *tomb.Tomb) error {
 
 	for {
 		select {
-		case evt, ok := <-fw.w.Event:
+		case evt, ok := <-fw.w.Events:
 			if !ok {
 				return fmt.Errorf("inotify watcher has been closed")
-			} else if evt.Name == fw.Filename {
+			} else if ((evt.Op & fsnotify.Create) == fsnotify.Create) && (evt.Name == fw.Filename) {
 				return nil
 			}
+        case err := <-fw.w.Events:
+            fmt.Errorf("error: %v", err)
 		case <-t.Dying():
 			return tomb.ErrDying
 		}
@@ -59,25 +61,25 @@ func (fw *InotifyFileWatcher) BlockUntilExists(t *tomb.Tomb) error {
 func (fw *InotifyFileWatcher) ChangeEvents(t *tomb.Tomb, fi os.FileInfo) *FileChanges {
 	changes := NewFileChanges()
 
-	err := fw.w.Watch(fw.Filename)
-	if err != nil {
-		util.Fatal("Error watching %v: %v", fw.Filename, err)
-	}
+    err := fw.w.Add(fw.Filename)
+    if err != nil {
+        util.Fatal("Error watching %v: %v", fw.Filename, err)
+    }
 
 	fw.Size = fi.Size()
 
 	go func() {
-		defer fw.w.RemoveWatch(fw.Filename)
+		defer fw.w.Remove(fw.Filename)
 		defer changes.Close()
 
 		for {
 			prevSize := fw.Size
 
-			var evt *fsnotify.FileEvent
+			var evt fsnotify.Event
 			var ok bool
 
 			select {
-			case evt, ok = <-fw.w.Event:
+			case evt, ok = <-fw.w.Events:
 				if !ok {
 					return
 				}
@@ -86,14 +88,14 @@ func (fw *InotifyFileWatcher) ChangeEvents(t *tomb.Tomb, fi os.FileInfo) *FileCh
 			}
 
 			switch {
-			case evt.IsDelete():
+            case evt.Op & fsnotify.Remove == fsnotify.Remove:
 				fallthrough
 
-			case evt.IsRename():
+			case evt.Op & fsnotify.Rename == fsnotify.Rename:
 				changes.NotifyDeleted()
 				return
 
-			case evt.IsModify():
+			case evt.Op & fsnotify.Write == fsnotify.Write:
 				fi, err := os.Stat(fw.Filename)
 				if err != nil {
 					if os.IsNotExist(err) {
