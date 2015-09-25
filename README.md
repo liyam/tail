@@ -1,6 +1,6 @@
 [![Build Status](https://travis-ci.org/ActiveState/tail.svg)](https://travis-ci.org/ActiveState/tail)
 
-# Go package for tail-ing files
+# Go package for tail-ing files - forked from https://github.com/hpcloud/tail
 
 A Go package striving to emulate the features of the BSD `tail` program. 
 
@@ -20,7 +20,7 @@ designed to work with log rotation tools.
 
 ## Installing
 
-    go get github.com/ActiveState/tail/...
+    go get github.com/liyam/tail/...
 
 ## Windows support
 

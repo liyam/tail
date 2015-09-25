@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ActiveState/tail/ratelimiter"
-	"github.com/ActiveState/tail/util"
-	"github.com/ActiveState/tail/watch"
+	"github.com/liyam/tail/ratelimiter"
+	"github.com/liyam/tail/util"
+	"github.com/liyam/tail/watch"
 	"gopkg.in/tomb.v1"
 )
 

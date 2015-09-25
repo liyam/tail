@@ -6,6 +6,7 @@
 package tail
 
 import (
+    //"log"
 	_ "fmt"
 	"io/ioutil"
 	"os"
@@ -14,7 +15,7 @@ import (
 	"time"
 
 	"./watch"
-	"github.com/ActiveState/tail/ratelimiter"
+	"github.com/liyam/tail/ratelimiter"
 )
 
 func init() {

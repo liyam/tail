@@ -30,7 +30,7 @@ func (fw *InotifyFileWatcher) BlockUntilExists(t *tomb.Tomb) error {
 	// Watch for new files to be created in the parent directory.
     err := fw.w.Add(dirname)
     if err != nil {
-        return nil
+        return err
     }
     defer fw.w.Remove(dirname)
 
@@ -50,7 +50,7 @@ func (fw *InotifyFileWatcher) BlockUntilExists(t *tomb.Tomb) error {
 				return nil
 			}
         case err := <-fw.w.Events:
-            fmt.Errorf("error: %v", err)
+            fmt.Errorf("error from inotify watcher: %v", err)
 		case <-t.Dying():
 			return tomb.ErrDying
 		}
