@@ -1,11 +1,11 @@
 // Copyright (c) 2013 ActiveState Software Inc. All rights reserved.
-
 package watch
 
 import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/ActiveState/tail/util"
 	"gopkg.in/fsnotify.v1"
@@ -26,13 +26,19 @@ func NewInotifyFileWatcher(filename string, w *fsnotify.Watcher) *InotifyFileWat
 
 func (fw *InotifyFileWatcher) BlockUntilExists(t *tomb.Tomb) error {
 	dirname := filepath.Dir(fw.Filename)
+	filename := fw.Filename
+
+	// for handling filename with no path prefix
+	if dirname == "." && !strings.HasPrefix(filename, "./") {
+		filename = "./" + filename
+	}
 
 	// Watch for new files to be created in the parent directory.
-    err := fw.w.Add(dirname)
-    if err != nil {
-        return err
-    }
-    defer fw.w.Remove(dirname)
+	err := fw.w.Add(dirname)
+	if err != nil {
+		return err
+	}
+	defer fw.w.Remove(dirname)
 
 	// Do a real check now as the file might have been created before
 	// calling `WatchFlags` above.
@@ -49,8 +55,8 @@ func (fw *InotifyFileWatcher) BlockUntilExists(t *tomb.Tomb) error {
 			} else if ((evt.Op & fsnotify.Create) == fsnotify.Create) && (evt.Name == fw.Filename) {
 				return nil
 			}
-        case err := <-fw.w.Events:
-            fmt.Errorf("error from inotify watcher: %v", err)
+		case err := <-fw.w.Events:
+			fmt.Errorf("error from inotify watcher: %v", err)
 		case <-t.Dying():
 			return tomb.ErrDying
 		}
@@ -61,10 +67,10 @@ func (fw *InotifyFileWatcher) BlockUntilExists(t *tomb.Tomb) error {
 func (fw *InotifyFileWatcher) ChangeEvents(t *tomb.Tomb, fi os.FileInfo) *FileChanges {
 	changes := NewFileChanges()
 
-    err := fw.w.Add(fw.Filename)
-    if err != nil {
-        util.Fatal("Error watching %v: %v", fw.Filename, err)
-    }
+	err := fw.w.Add(fw.Filename)
+	if err != nil {
+		util.Fatal("Error watching %v: %v", fw.Filename, err)
+	}
 
 	fw.Size = fi.Size()
 
@@ -88,14 +94,14 @@ func (fw *InotifyFileWatcher) ChangeEvents(t *tomb.Tomb, fi os.FileInfo) *FileCh
 			}
 
 			switch {
-            case evt.Op & fsnotify.Remove == fsnotify.Remove:
+			case evt.Op&fsnotify.Remove == fsnotify.Remove:
 				fallthrough
 
-			case evt.Op & fsnotify.Rename == fsnotify.Rename:
+			case evt.Op&fsnotify.Rename == fsnotify.Rename:
 				changes.NotifyDeleted()
 				return
 
-			case evt.Op & fsnotify.Write == fsnotify.Write:
+			case evt.Op&fsnotify.Write == fsnotify.Write:
 				fi, err := os.Stat(fw.Filename)
 				if err != nil {
 					if os.IsNotExist(err) {
