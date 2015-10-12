@@ -52,7 +52,7 @@ func (fw *InotifyFileWatcher) BlockUntilExists(t *tomb.Tomb) error {
 		case evt, ok := <-fw.w.Events:
 			if !ok {
 				return fmt.Errorf("inotify watcher has been closed")
-			} else if ((evt.Op & fsnotify.Create) == fsnotify.Create) && (evt.Name == fw.Filename) {
+			} else if ((evt.Op & fsnotify.Create) == fsnotify.Create) && (evt.Name == filename) {
 				return nil
 			}
 		case <-t.Dying():
