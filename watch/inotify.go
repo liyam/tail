@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ActiveState/tail/util"
-	"gopkg.in/fsnotify.v1"
+	"github.com/liyam/fsnotify"
+	"github.com/liyam/tail/util"
 	"gopkg.in/tomb.v1"
 )
 
@@ -55,8 +55,6 @@ func (fw *InotifyFileWatcher) BlockUntilExists(t *tomb.Tomb) error {
 			} else if ((evt.Op & fsnotify.Create) == fsnotify.Create) && (evt.Name == fw.Filename) {
 				return nil
 			}
-		case err := <-fw.w.Events:
-			fmt.Errorf("error from inotify watcher: %v", err)
 		case <-t.Dying():
 			return tomb.ErrDying
 		}
@@ -119,6 +117,18 @@ func (fw *InotifyFileWatcher) ChangeEvents(t *tomb.Tomb, fi os.FileInfo) *FileCh
 					changes.NotifyModified()
 				}
 				prevSize = fw.Size
+
+			case evt.Op&fsnotify.Chmod == fsnotify.Chmod:
+				_, err := os.Stat(fw.Filename)
+				if err != nil {
+					if os.IsNotExist(err) {
+						// need to close file to delete inode
+						changes.NotifyNeedToClose()
+						continue
+					}
+					// XXX: report this error back to the user
+					util.Fatal("Failed to stat file %v: %v", fw.Filename, err)
+				}
 			}
 		}
 	}()

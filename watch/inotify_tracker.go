@@ -3,7 +3,7 @@
 package watch
 
 import (
-	"gopkg.in/fsnotify.v1"
+	"github.com/liyam/fsnotify"
 	"log"
 	"sync"
 )

@@ -6,7 +6,7 @@
 package tail
 
 import (
-    //"log"
+	//"log"
 	_ "fmt"
 	"io/ioutil"
 	"os"
@@ -156,7 +156,7 @@ func TestLocationEnd(_t *testing.T) {
 
 func TestLocationMiddle(_t *testing.T) {
 	// Test reading from middle.
-	t := NewTailTest("location-end", _t)
+	t := NewTailTest("location-middle", _t)
 	t.CreateFile("test.txt", "hello\nworld\n")
 	tail := t.StartTail("test.txt", Config{Follow: true, Location: &SeekInfo{-6, os.SEEK_END}})
 	go t.VerifyTailOutput(tail, []string{"world", "more", "data"})

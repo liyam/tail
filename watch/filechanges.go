@@ -1,14 +1,15 @@
 package watch
 
 type FileChanges struct {
-	Modified  chan bool // Channel to get notified of modifications
-	Truncated chan bool // Channel to get notified of truncations
-	Deleted   chan bool // Channel to get notified of deletions/renames
+	Modified    chan bool // Channel to get notified of modifications
+	Truncated   chan bool // Channel to get notified of truncations
+	Deleted     chan bool // Channel to get notified of deletions/renames
+	NeedToClose chan bool // Channel to get notified of request to close current opening file
 }
 
 func NewFileChanges() *FileChanges {
 	return &FileChanges{
-		make(chan bool), make(chan bool), make(chan bool)}
+		make(chan bool), make(chan bool), make(chan bool), make(chan bool)}
 }
 
 func (fc *FileChanges) NotifyModified() {
@@ -23,7 +24,12 @@ func (fc *FileChanges) NotifyDeleted() {
 	sendOnlyIfEmpty(fc.Deleted)
 }
 
+func (fc *FileChanges) NotifyNeedToClose() {
+	sendOnlyIfEmpty(fc.NeedToClose)
+}
+
 func (fc *FileChanges) Close() {
+	close(fc.NeedToClose)
 	close(fc.Modified)
 	close(fc.Truncated)
 	close(fc.Deleted)

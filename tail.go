@@ -66,6 +66,8 @@ type Tail struct {
 	reader  *bufio.Reader
 	tracker *watch.InotifyTracker
 
+	incompleteLine string
+
 	watcher watch.FileWatcher
 	changes *watch.FileChanges
 
@@ -219,6 +221,8 @@ func (tail *Tail) tailFileSync() {
 
 	// Read line by line.
 	for {
+		tail.incompleteLine = ""
+
 		// grab the position in case we need to back up in the event of a half-line
 		offset, err := tail.Tell()
 		if err != nil {
@@ -265,6 +269,9 @@ func (tail *Tail) tailFileSync() {
 					tail.Kill(err)
 					return
 				}
+
+				// it holds incomplete line to send it when the file is removed or truncated
+				tail.incompleteLine = line
 			}
 
 			// When EOF is reached, wait for more data to become
@@ -303,35 +310,49 @@ func (tail *Tail) waitForChanges() error {
 		tail.changes = tail.watcher.ChangeEvents(&tail.Tomb, st)
 	}
 
-	select {
-	case <-tail.changes.Modified:
-		return nil
-	case <-tail.changes.Deleted:
-		tail.changes = nil
-		if tail.ReOpen {
-			// XXX: we must not log from a library.
-			tail.Logger.Printf("Re-opening moved/deleted file %s ...", tail.Filename)
+	for {
+		select {
+		case <-tail.changes.NeedToClose:
+			go func() {
+				tail.Logger.Printf("Closing tail file %s so that it can be removed properly", tail.Filename)
+				if err := tail.file.Close(); err != nil {
+					tail.Kill(err)
+				}
+				tail.Logger.Printf("Successfully closed %s", tail.Filename)
+				tail.file = nil
+			}()
+			continue
+		case <-tail.changes.Modified:
+			return nil
+		case <-tail.changes.Deleted:
+			tail.changes = nil
+			if tail.ReOpen {
+				// XXX: we must not log from a library.
+				tail.sendIncompleteLine()
+				tail.Logger.Printf("Re-opening moved/deleted file %s ...", tail.Filename)
+				if err := tail.reopen(); err != nil {
+					return err
+				}
+				tail.Logger.Printf("Successfully reopened %s", tail.Filename)
+				tail.openReader()
+				return nil
+			} else {
+				tail.Logger.Printf("Stopping tail as file no longer exists: %s", tail.Filename)
+				return ErrStop
+			}
+		case <-tail.changes.Truncated:
+			tail.sendIncompleteLine()
+			// Always reopen truncated files (Follow is true)
+			tail.Logger.Printf("Re-opening truncated file %s ...", tail.Filename)
 			if err := tail.reopen(); err != nil {
 				return err
 			}
-			tail.Logger.Printf("Successfully reopened %s", tail.Filename)
+			tail.Logger.Printf("Successfully reopened truncated %s", tail.Filename)
 			tail.openReader()
 			return nil
-		} else {
-			tail.Logger.Printf("Stopping tail as file no longer exists: %s", tail.Filename)
+		case <-tail.Dying():
 			return ErrStop
 		}
-	case <-tail.changes.Truncated:
-		// Always reopen truncated files (Follow is true)
-		tail.Logger.Printf("Re-opening truncated file %s ...", tail.Filename)
-		if err := tail.reopen(); err != nil {
-			return err
-		}
-		tail.Logger.Printf("Successfully reopened truncated %s", tail.Filename)
-		tail.openReader()
-		return nil
-	case <-tail.Dying():
-		return ErrStop
 	}
 	panic("unreachable")
 }
@@ -392,5 +413,14 @@ func (tail *Tail) sendLine(line string) bool {
 func (tail *Tail) Cleanup() {
 	if tail.tracker != nil {
 		tail.tracker.CloseAll()
+	}
+}
+
+// Send incomplete line which does not end with line separator
+// when the file is removed or truncated
+func (tail *Tail) sendIncompleteLine() {
+	if len(tail.incompleteLine) > 0 {
+		tail.Logger.Printf("Sending incomplete line")
+		tail.sendLine(tail.incompleteLine)
 	}
 }
